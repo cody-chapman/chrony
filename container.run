@@ -1,0 +1,18 @@
+podman run -d \
+  --name ntp \
+  --replace \
+  --restart=always \
+  --health-cmd "chronyc -n tracking || exit 1" \
+  --label "io.containers.autoupdate=registry" \
+  -e NTP_SERVERS="pool.ntp.org" \
+  -e TZ="America/Chicago" \
+  -v ntp-etc:/etc/chrony:Z \
+  -v ntp-run:/run/chrony:Z \
+  -v ntp-lib:/var/lib/chrony:Z \
+  -p 123:123/udp \
+  ghcr.io/west-gate-bank/chrony:latest
+
+podman quadlet install ntp.container
+
+sudo systemctl enable --now podman-auto-update.timer
+sudo systemctl restart podman-auto-update.timer

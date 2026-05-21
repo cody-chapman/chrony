@@ -1,0 +1,89 @@
+#!/bin/sh
+
+set -eu
+
+DEFAULT_NTP="0.pool.ntp.org,1.pool.ntp.org,2.pool.ntp.org,3.pool.ntp.org"
+CHRONY_CONF_FILE="/etc/chrony.conf"
+
+# confirm correct permissions on chrony run directory
+if [ -d /run/chrony ]; then
+  chown -R chrony:chrony /run/chrony
+  chmod o-rx /run/chrony
+  # remove previous pid file if it exist
+  rm -f /var/run/chrony/chronyd.pid
+fi
+
+# confirm correct permissions on chrony variable state directory
+if [ -d /var/lib/chrony ]; then
+  chown -R chrony:chrony /var/lib/chrony
+fi
+
+rm -f "$CHRONY_CONF_FILE"
+touch "$CHRONY_CONF_FILE"
+chown chrony:chrony "$CHRONY_CONF_FILE"
+
+## dynamically populate chrony config file.
+# NTP_SERVERS environment variable is not present, so populate with default server
+if [ -z "${NTP_SERVERS:-}" ]; then
+  NTP_SERVERS="${DEFAULT_NTP}"
+fi
+
+# LOG_LEVEL environment variable is not present, so populate with chrony default (0)
+# chrony log levels: 0 (informational), 1 (warning), 2 (non-fatal error) and 3 (fatal error)
+if [ -z "${LOG_LEVEL:-}" ]; then
+  LOG_LEVEL=0
+else
+  # confirm log level is between 0-3, since these are the only log levels supported
+  if expr "${LOG_LEVEL}" : "[^0123]" > /dev/null; then
+    # level outside of supported range, let's set to default (0)
+    LOG_LEVEL=0
+  fi
+fi
+
+IFS=","
+for N in $NTP_SERVERS; do
+  # strip any quotes found before or after ntp server
+  N_CLEANED=$(printf "%s" "$N" | tr -d '"')
+
+  # check if ntp server has a 127.0.0.0/8 address (RFC3330) indicating it's
+  # the local system clock
+  if echo "${N_CLEANED}" | grep -q '^127\.'; then
+    echo "server ${N_CLEANED}" >> ${CHRONY_CONF_FILE}
+    echo "local stratum 10"    >> ${CHRONY_CONF_FILE}
+  else
+    if [ "${ENABLE_NTS:-false}" = true ]; then
+      echo "server ${N_CLEANED} iburst nts" >> ${CHRONY_CONF_FILE}
+    else
+      echo "server ${N_CLEANED} iburst" >> ${CHRONY_CONF_FILE}
+    fi
+  fi
+done
+
+# PTP0 configuration: if it has been passed through, it means we want to use it
+if [ -e /dev/ptp0 ]; then
+  echo "refclock PHC /dev/ptp0 poll 3 dpoll -2 stratum 2" >> ${CHRONY_CONF_FILE}
+fi
+
+# final bits for the config file
+{
+  echo
+  echo "driftfile /var/lib/chrony/chrony.drift"
+  echo "makestep 0.1 3"
+  if [ -n "${NTP_DIRECTIVES}" ]; then
+    echo -e "${NTP_DIRECTIVES}"
+  fi
+  if [ "${NOCLIENTLOG:-false}" = true ]; then
+    echo "noclientlog"
+  fi
+  echo
+  echo "allow all"
+} >> ${CHRONY_CONF_FILE}
+
+# enable control of system clock, disabled by default
+SYSCLK="-x"
+if [ "${ENABLE_SYSCLK:-false}" = true ]; then
+  SYSCLK=""
+fi
+
+## startup chronyd in the foreground
+exec /usr/sbin/chronyd -U -u chrony -d ${SYSCLK} -L ${LOG_LEVEL}
