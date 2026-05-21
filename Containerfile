@@ -9,7 +9,7 @@ ENV NTP_DIRECTIVES="ratelimit\nrtcsync"
 RUN set -eux && \
     dnf -y update && \
     dnf -y install \
-        chronyd \
+        chrony \
         tzdata && \
     dnf clean all && \
     rm -f /etc/chrony.conf && \
