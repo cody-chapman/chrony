@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 #FROM registry.access.redhat.com/ubi10/ubi
-FROM rockylinux/rockylinux:10-ubi-init
+FROM rockylinux/rockylinux:10-ubi
 
 # default configuration
 ENV NTP_DIRECTIVES="ratelimit\nrtcsync"
