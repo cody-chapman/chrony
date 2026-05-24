@@ -1,0 +1,30 @@
+[Unit]
+Description=Chrony NTP Time Server
+After=network-online.target
+
+[Container]
+Image=ghcr.io/cody-chapman/chrony:latest
+ContainerName=ntp
+AutoUpdate=image
+
+# Health Check
+HealthCmd=chronyc -n tracking || exit 1
+
+# Environment Variables
+Environment=NTP_SERVERS=pool.ntp.org
+Environment=TZ=America/Chicago
+
+# Named Volumes
+Volume=ntp-etc:/etc/chrony:Z
+Volume=ntp-run:/run/chrony:Z
+Volume=ntp-lib:/var/lib/chrony:Z
+
+# Network / Ports
+PublishPort=123:123/udp
+
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
